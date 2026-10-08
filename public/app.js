@@ -5,8 +5,9 @@ let revision = 0, resultRevision = -1, generation = 0, configured = false, chose
 let evaluationTimer, evaluation, evaluationAbort, pending = false, finalizing = false, typed = false, voice = null;
 const emptyOptions = () => [1, 2].map((n) => ({ id: `option_${n}`, label: '', excluded: false }));
 const escape = (value) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const topic = () => $('#topic').value.trim();
 const context = () => $('#context').value.trim();
-const snapshot = () => ({ options: options.filter((o) => o.label.trim()).map((o) => ({ ...o, label: o.label.trim() })), context: context(), history: history.slice(-20).map(({ role, text }) => ({ role, text: text.slice(-1000) })), dismissed });
+const snapshot = () => ({ topic: topic(), options: options.filter((o) => o.label.trim()).map((o) => ({ ...o, label: o.label.trim() })), context: context(), history: history.slice(-20).map(({ role, text }) => ({ role, text: text.slice(-1000) })), dismissed });
 
 function status(text, error = false) {
   $('#status').textContent = text;
@@ -14,20 +15,20 @@ function status(text, error = false) {
 }
 
 function controls() {
-  const valid = options.filter((o) => o.label.trim()).length >= 2;
+  const valid = Boolean(topic()) && options.filter((o) => o.label.trim()).length >= 2;
   $('#talk').disabled = !configured || (!voice && !valid) || voice?.closing;
   $('#talk').classList.toggle('live', Boolean(voice));
-  $('#talk span').textContent = voice?.closing ? 'Завершаем разговор…' : voice?.started ? 'Остановить' : voice ? 'Отменить подключение' : 'Поговорить';
+  $('#talk span').textContent = voice?.closing ? 'Ending conversation…' : voice?.started ? 'Stop' : voice ? 'Cancel connection' : 'Talk';
   $('#finalize').disabled = !configured || !valid || voice?.closing || final || finalizing;
-  $('#finalize').textContent = finalizing ? 'Подводим итог…' : final ? 'Итог готов' : 'Подвести итог ↗';
+  $('#finalize').textContent = finalizing ? 'Summing up…' : final ? 'Summary ready' : 'Wrap up ↗';
   $('#add').disabled = options.length >= 8;
   $('#example').hidden = Boolean(voice);
 }
 
 function renderOptions() {
   optionsElement.innerHTML = options.map((o, i) => `<div class="option" data-id="${o.id}">
-    <div class="option-top"><label class="number" for="${o.id}">${String(i + 1).padStart(2, '0')}</label><input id="${o.id}" aria-label="Вариант ${i + 1}" value="${escape(o.label)}" maxlength="160" placeholder="${i ? 'Или…' : 'Один вариант…'}"><button class="icon exclude" data-action="exclude" aria-label="Исключить вариант ${i + 1}" aria-pressed="${o.excluded}" title="Исключить / вернуть">−</button><button class="icon" data-action="remove" aria-label="Удалить вариант ${i + 1}" title="Удалить">×</button></div>
-    <div class="score" hidden><div class="score-top"><span class="share"></span><div class="track"><span class="fill"></span></div><button class="choose" data-action="choose">Выбрать</button></div><p class="reason"></p></div></div>`).join('');
+    <div class="option-top"><label class="number" for="${o.id}">${String(i + 1).padStart(2, '0')}</label><input id="${o.id}" aria-label="Option ${i + 1}" value="${escape(o.label)}" maxlength="160" placeholder="${i ? 'Or…' : 'One option…'}"><button class="icon exclude" data-action="exclude" aria-label="Exclude option ${i + 1}" aria-pressed="${o.excluded}" title="Exclude / restore">−</button><button class="icon" data-action="remove" aria-label="Remove option ${i + 1}" title="Remove">×</button></div>
+    <div class="score" hidden><div class="score-top"><span class="share"></span><div class="track"><span class="fill"></span></div><button class="choose" data-action="choose">Choose</button></div><p class="reason"></p></div></div>`).join('');
   renderResult();
 }
 
@@ -42,9 +43,9 @@ function renderResult() {
     row.querySelector('.score').hidden = !score || !option.label.trim() || (!result.ready && !score.reason);
     row.querySelector('.share').textContent = score?.share == null ? '—' : `${score.share}%`;
     row.querySelector('.fill').style.transform = `scaleX(${(score?.share || 0) / 100})`;
-    row.querySelector('.reason').textContent = score?.excluded ? `Исключён: ${score.reason}` : score?.reason || '';
+    row.querySelector('.reason').textContent = score?.excluded ? `Excluded: ${score.reason}` : score?.reason || '';
     row.querySelector('.choose').disabled = !result?.ready || option.excluded || Boolean(score?.excluded);
-    row.querySelector('.choose').textContent = chosen === option.id ? 'Выбрано' : 'Выбрать';
+    row.querySelector('.choose').textContent = chosen === option.id ? 'Chosen' : 'Choose';
     row.querySelector('.choose').setAttribute('aria-pressed', chosen === option.id);
     row.querySelector('[data-action="remove"]').disabled = options.length <= 2;
   }
@@ -58,10 +59,10 @@ function renderResult() {
   const leaders = result?.ready ? result.options.filter((o) => !o.excluded).sort((a, b) => b.share - a.share) : [];
   const selected = chosen && options.find((o) => o.id === chosen);
   $('#result').hidden = !selected && !(final && leaders.length);
-  if (selected) $('#result').innerHTML = `<p class="eyebrow">ТВОЙ ВЫБОР</p><strong>${escape(selected.label)}</strong><p>Ты выбираешь. Оценка помогает увидеть причины.</p>`;
+  if (selected) $('#result').innerHTML = `<p class="eyebrow">YOUR CHOICE</p><strong>${escape(selected.label)}</strong><p>You decide. The scores help explain why.</p>`;
   else if (final && leaders.length) {
     const close = leaders.length > 1 && leaders[0].share - leaders[1].share <= 5;
-    $('#result').innerHTML = `<p class="eyebrow">${close ? 'БЛИЗКИЙ ВЫБОР' : 'СЕЙЧАС БОЛЬШЕ ПОДХОДИТ'}</p><strong>${escape(close ? `${leaders[0].label} или ${leaders[1].label}` : leaders[0].label)}</strong><p>${escape(close ? 'Разница небольшая. Выбери то, к чему сейчас больше тянет.' : leaders[0].reason)}</p>`;
+    $('#result').innerHTML = `<p class="eyebrow">${close ? 'CLOSE CALL' : 'BEST FIT FOR NOW'}</p><strong>${escape(close ? `${leaders[0].label} or ${leaders[1].label}` : leaders[0].label)}</strong><p>${escape(close ? 'The scores are close. Go with the option that feels right to you.' : leaders[0].reason)}</p>`;
   }
   controls();
 }
@@ -77,7 +78,7 @@ function changed() {
 async function post(path, data, signal) {
   const response = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data), signal });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || 'Не получилось связаться с OpenAI. Попробуй ещё раз.');
+  if (!response.ok) throw new Error(body.error || 'Could not reach OpenAI. Try again.');
   return body;
 }
 
@@ -97,11 +98,12 @@ async function drain() {
     if (typed && context()) history.push({ role: 'user', text: context() });
     typed = false;
     const version = revision, state = snapshot();
-    if (state.options.length < 2) { status('Добавь хотя бы два варианта.'); return null; }
-    if (state.context.length > 12000) { status('Рассказ стал слишком длинным. Начни новый выбор.', true); return null; }
+    if (!state.topic) { status('Add a topic above first.'); return null; }
+    if (state.options.length < 2) { status('Add at least two options above first.'); return null; }
+    if (state.context.length > 12000) { status('Your story is too long. Start over.', true); return null; }
     evaluationAbort = new AbortController();
     const timeout = setTimeout(() => evaluationAbort.abort(), 45000);
-    status('Сравниваем варианты…');
+    status('Comparing options…');
     try {
       const next = await post('/api/evaluate', state, evaluationAbort.signal);
       if (voice?.closing) { pending = false; continue; }
@@ -110,10 +112,10 @@ async function drain() {
       if (next.question && history.at(-1)?.text !== next.question) history.push({ role: 'assistant', text: next.question });
       transcript();
       renderResult();
-      status(next.options.every((o) => o.excluded) ? 'Все варианты исключены. Верни один или добавь другой.' : next.ready ? (voice?.started ? 'Слушаю. Оценка обновляется по ходу разговора.' : 'Можно уточнить ситуацию или подвести итог.') : 'Расскажи чуть больше о том, что важно.');
+      status(next.options.every((o) => o.excluded) ? 'All options are excluded. Restore one or add another.' : next.ready ? (voice?.started ? 'Listening. Scores update as we talk.' : 'Add more detail or wrap up.') : 'Tell me a little more about what matters.');
       send(voice, { type: 'session.thinking.append', delegation_id: null, content: summary(next) });
     } catch (error) {
-      if (version === revision) status(error.name === 'AbortError' ? 'Сравнение заняло слишком долго. Попробуй ещё раз.' : error.message, true);
+      if (version === revision) status(error.name === 'AbortError' ? 'The comparison timed out. Try again.' : error.message, true);
     } finally { clearTimeout(timeout); evaluationAbort = null; }
   }
   return result;
@@ -121,7 +123,7 @@ async function drain() {
 
 function summary(value) {
   const leaders = value?.options.filter((o) => !o.excluded).sort((a, b) => (b.share || 0) - (a.share || 0)).slice(0, 2) || [];
-  const text = value ? `${value.ready ? 'Оценка' : 'Недостаточно данных'}: ${leaders.map((o) => `${o.label.slice(0, 64)}: ${o.share == null ? 'без оценки' : `${o.share}%`}`).join('; ') || 'все варианты исключены'}. ${value.question || leaders[0]?.reason.slice(0, 60) || ''}${value.suggestion ? ` Идея: ${value.suggestion.label.slice(0, 32)}.` : ''}` : 'Сравнение не удалось. Попроси попробовать ещё раз.';
+  const text = value ? `Topic: ${topic().slice(0, 64)}. ${value.ready ? 'Scores' : 'Not enough detail'}: ${leaders.map((o) => `${o.label.slice(0, 64)}: ${o.share == null ? 'not scored' : `${o.share}%`}`).join('; ') || 'all options excluded'}. ${value.question || leaders[0]?.reason.slice(0, 60) || ''}${value.suggestion ? ` Suggestion: ${value.suggestion.label.slice(0, 32)}.` : ''}` : 'Comparison failed. Ask the user to try again.';
   const chars = Array.from(text), encoder = new TextEncoder();
   while (encoder.encode(chars.join('')).length > 480) chars.pop();
   return chars.length < Array.from(text).length ? chars.join('').replace(/\s+\S*$/, '') + '…' : text;
@@ -133,7 +135,7 @@ function send(session, event) {
 
 function transcript() {
   const turns = [...history, ...(voice?.fragment ? [voice.fragment] : [])];
-  $('#transcript').innerHTML = turns.length ? turns.map((t) => `<p><b>${t.role === 'user' ? 'ТЫ' : 'AI'}</b>${escape(t.text)}</p>`).join('') : 'Здесь появится расшифровка разговора.';
+  $('#transcript').innerHTML = turns.length ? turns.map((t) => `<p><b>${t.role === 'user' ? 'YOU' : 'AI'}</b>${escape(t.text)}</p>`).join('') : 'Your conversation will appear here.';
 }
 
 function flush(session) {
@@ -150,7 +152,7 @@ function receive(session, event) {
   if (voice !== session) return;
   if (event.type === 'session.started') {
     session.started = true; clearTimeout(session.startTimer);
-    status('Слушаю. Расскажи о своём выборе.'); controls();
+    status('Listening. Tell me about your choice.'); controls();
   } else if (event.type === 'session.closed') {
     flush(session); session.confirmed = true; session.closed?.();
     if (!session.closing) finishVoice(session);
@@ -167,7 +169,7 @@ function receive(session, event) {
     if (session.delegations.has(id)) return;
     session.delegations.add(id); flush(session);
     evaluate().then((value) => send(session, { type: 'session.commentary.append', delegation_id: id, content: summary(value) }));
-  } else if (event.type === 'error') status(event.error?.message || 'Голос прервался. Попробуй ещё раз.', true);
+  } else if (event.type === 'error') status(event.error?.message || 'Voice interrupted. Try again.', true);
 }
 
 function cleanup(session) {
@@ -180,20 +182,20 @@ function cleanup(session) {
 
 async function startVoice() {
   const session = { abort: new AbortController(), delegations: new Set(), started: false, closing: false };
-  voice = session; controls(); status('Разреши доступ к микрофону…');
+  voice = session; controls(); status('Allow microphone access…');
   $('#audio').play().catch(() => {});
   session.startTimer = setTimeout(() => {
-    if (voice === session && !session.started) { cleanup(session); status('Голос не подключился. Проверь интернет и попробуй ещё раз.', true); }
+    if (voice === session && !session.started) { cleanup(session); status('Voice did not connect. Check your connection and try again.', true); }
   }, 45000);
   try {
-    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error('Для голоса открой localhost в современном браузере. Можно написать текстом.');
+    if (!navigator.mediaDevices?.getUserMedia || !window.RTCPeerConnection) throw new Error('Open this app on localhost in a modern browser to use voice. You can also type.');
     session.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     if (voice !== session) return session.stream.getTracks().forEach((t) => t.stop());
     session.peer = new RTCPeerConnection();
-    session.peer.ontrack = (event) => { if (voice === session) { $('#audio').srcObject = event.streams[0]; $('#audio').play().catch(() => status('Нажми «Остановить» и подключись снова, чтобы включить звук.', true)); } };
+    session.peer.ontrack = (event) => { if (voice === session) { $('#audio').srcObject = event.streams[0]; $('#audio').play().catch(() => status('Press Stop and reconnect to enable audio.', true)); } };
     session.stream.getTracks().forEach((t) => session.peer.addTrack(t, session.stream));
     session.channel = session.peer.createDataChannel('oai-events');
-    session.channel.onmessage = (event) => { try { receive(session, JSON.parse(event.data)); } catch { status('Не удалось прочитать ответ голоса.', true); } };
+    session.channel.onmessage = (event) => { try { receive(session, JSON.parse(event.data)); } catch { status('Could not read the voice response.', true); } };
     session.channel.onclose = () => { if (voice === session && !session.confirmed && !session.closing) finishVoice(session, false); };
     session.peer.onconnectionstatechange = () => { if (voice === session && session.peer.connectionState === 'failed') finishVoice(session, false); };
     await session.peer.setLocalDescription(await session.peer.createOffer());
@@ -204,14 +206,14 @@ async function startVoice() {
       session.peer.addEventListener('icegatheringstatechange', check); check();
     });
     if (voice !== session) return;
-    status('Подключаем голос…');
+    status('Connecting voice…');
     const answer = await post('/api/session', { ...snapshot(), sdp: session.peer.localDescription.sdp }, session.abort.signal);
     if (voice !== session) return;
     await session.peer.setRemoteDescription({ type: 'answer', sdp: answer.transport.sdp });
   } catch (error) {
     if (voice !== session) return;
     cleanup(session);
-    status(error.name === 'NotAllowedError' ? 'Разреши микрофон в настройках браузера и нажми «Поговорить» снова.' : error.name === 'NotFoundError' ? 'Микрофон не найден. Подключи его или напиши текстом.' : error.message, true);
+    status(error.name === 'NotAllowedError' ? 'Allow the microphone in your browser settings, then press Talk again.' : error.name === 'NotFoundError' ? 'Microphone not found. Connect one or type instead.' : error.message, true);
   }
 }
 
@@ -220,14 +222,14 @@ async function finishVoice(session, confirmed = session.confirmed) {
   const epoch = generation;
   flush(session); cleanup(session);
   await evaluate(true);
-  if (!confirmed && epoch === generation) status('Разговор оборвался. Последняя фраза могла сохраниться не полностью.', true);
+  if (!confirmed && epoch === generation) status('The conversation ended early. Your last phrase may be incomplete.', true);
 }
 
 async function stopVoice() {
   const session = voice;
   if (!session || session.closing) return;
-  if (!session.started) { cleanup(session); status('Подключение отменено.'); return evaluate(true); }
-  session.closing = true; pending = false; clearTimeout(evaluationTimer); controls(); status('Сохраняем последнюю фразу…');
+  if (!session.started) { cleanup(session); status('Connection cancelled.'); return evaluate(true); }
+  session.closing = true; pending = false; clearTimeout(evaluationTimer); controls(); status('Saving your last phrase…');
   // Keep the receiver and microphone alive until the final transcripts arrive.
   await new Promise((resolve) => {
     const timeout = setTimeout(resolve, 15000);
@@ -254,6 +256,7 @@ optionsElement.addEventListener('click', (event) => {
   changed(); renderOptions();
 });
 $('#add').onclick = () => { if (options.length >= 8) return; options.push({ id: `option_${crypto.randomUUID().slice(0, 8)}`, label: '', excluded: false }); changed(); renderOptions(); optionsElement.lastElementChild.querySelector('input').focus(); };
+$('#topic').oninput = changed;
 $('#context').oninput = () => { typed = true; changed(); };
 $('#talk').onclick = () => voice ? stopVoice() : startVoice();
 $('#finalize').onclick = async () => {
@@ -265,17 +268,17 @@ $('#finalize').onclick = async () => {
   if (result?.ready && resultRevision === revision) final = true;
   renderResult();
 };
-$('#accept').onclick = () => { const suggestion = result?.suggestion; if (!suggestion || options.length >= 8) return; options.push({ id: `option_${crypto.randomUUID().slice(0, 8)}`, label: suggestion.label, excluded: false }); history.push({ role: 'assistant', text: `Предлагаю вариант: ${suggestion.label}` }, { role: 'user', text: 'Добавь этот вариант.' }); changed(); renderOptions(); };
+$('#accept').onclick = () => { const suggestion = result?.suggestion; if (!suggestion || options.length >= 8) return; options.push({ id: `option_${crypto.randomUUID().slice(0, 8)}`, label: suggestion.label, excluded: false }); history.push({ role: 'assistant', text: `One option to consider: ${suggestion.label}` }, { role: 'user', text: 'Add that option.' }); changed(); renderOptions(); };
 $('#dismiss').onclick = () => { if (result?.suggestion) dismissed = [...new Set([...dismissed, result.suggestion.label])].slice(-30); changed(); };
 function reset() {
   generation++; revision++; pending = false; clearTimeout(evaluationTimer); evaluationAbort?.abort();
   if (voice) cleanup(voice);
   options = emptyOptions(); history = []; dismissed = []; result = null; chosen = null; final = false; finalizing = false; typed = false;
-  $('#context').value = ''; transcript(); renderOptions();
-  status(configured ? 'Добавь варианты и начни разговор.' : 'Добавь ключ OpenAI в файл .env и перезапусти приложение.', !configured);
+  $('#topic').value = ''; $('#context').value = ''; transcript(); renderOptions();
+  status(configured ? 'Add a topic and two options to enable Talk.' : 'Add your OpenAI key to .env and restart the app.', !configured);
 }
 $('#reset').onclick = reset;
-$('#example').onclick = () => { reset(); options[0].label = 'Остаться дома'; options[1].label = 'Пойти гулять'; $('#context').value = 'После работы устал, но весь день сидел за компьютером. На улице хорошая погода. Хочу немного отдохнуть и переключиться.'; changed(); renderOptions(); };
+$('#example').onclick = () => { reset(); $('#topic').value = 'How should I spend the evening?'; options[0].label = 'Stay home'; options[1].label = 'Go for a walk'; $('#context').value = 'I feel tired after work, but I spent all day at my desk. The weather is nice. I want to rest and clear my head.'; changed(); renderOptions(); };
 window.addEventListener('pagehide', () => { if (voice) cleanup(voice); evaluationAbort?.abort(); });
 options = emptyOptions(); renderOptions();
-fetch('/api/health').then((r) => r.json()).then((health) => { configured = health.configured; controls(); status(configured ? 'Добавь варианты и начни разговор.' : 'Добавь ключ OpenAI в файл .env и перезапусти приложение.', !configured); }).catch(() => status('Локальное приложение недоступно. Перезапусти его и обнови страницу.', true));
+fetch('/api/health').then((r) => r.json()).then((health) => { configured = health.configured; controls(); status(configured ? 'Add a topic and two options to enable Talk.' : 'Add your OpenAI key to .env and restart the app.', !configured); }).catch(() => status('The local app is unavailable. Restart it and refresh this page.', true));

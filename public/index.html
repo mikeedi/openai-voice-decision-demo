@@ -1,32 +1,33 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#f7f5ef">
-  <title>решим. — проговори свой выбор</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='20' fill='%23374f39'/%3E%3Ctext x='32' y='44' text-anchor='middle' fill='%23f7f5ef' font-family='sans-serif' font-size='42'%3Eр%3C/text%3E%3C/svg%3E">
+  <title>Decide with me</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='20' fill='%23374f39'/%3E%3Ctext x='32' y='44' text-anchor='middle' fill='%23f7f5ef' font-family='sans-serif' font-size='42'%3Ed%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="/style.css">
   <script src="/app.js" defer></script>
 </head>
 <body>
   <main>
-    <header><a class="brand" href="/" aria-label="решим — на главную">решим<span>.</span></a><button id="reset" class="quiet">Начать заново</button></header>
+    <header><a class="brand" href="/" aria-label="Decide with me — home">decide<span>.</span></a><button id="reset" class="quiet">Start over</button></header>
     <section aria-labelledby="headline">
-      <h1 id="headline">Проговори свой выбор.</h1>
-      <p class="intro">Добавь варианты. Расскажи, что для тебя важно.</p>
-      <div id="options" aria-label="Варианты выбора"></div>
-      <div class="option-actions"><button id="add" class="quiet">+ Ещё вариант</button><button id="example" class="quiet">Попробовать пример</button></div>
-      <div class="voice"><button id="talk" class="primary" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><span>Поговорить</span></button><span class="voice-note">голос AI · OpenAI</span></div>
-      <p id="status" class="status" role="status" aria-live="polite">Проверяем подключение…</p>
-      <button id="finalize" class="finish" disabled>Подвести итог <span aria-hidden="true">↗</span></button>
+      <h1 id="headline">Talk through your choice.</h1>
+      <p class="intro">Add a topic and options. Tell me what matters.</p>
+      <div class="topic"><label for="topic">Topic</label><input id="topic" type="text" maxlength="160" placeholder="How should I spend the evening?" required></div>
+      <div id="options" aria-label="Options"></div>
+      <div class="option-actions"><button id="add" class="quiet">+ Add an option</button><button id="example" class="quiet">Try an example</button></div>
+      <div class="voice"><button id="talk" class="primary" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg><span>Talk</span></button><span class="voice-note">AI voice · OpenAI</span></div>
+      <p id="status" class="status" role="status" aria-live="polite">Checking connection…</p>
+      <button id="finalize" class="finish" disabled>Wrap up <span aria-hidden="true">↗</span></button>
       <section id="result" class="note result" aria-live="polite" hidden></section>
       <p id="question" class="question" hidden></p>
-      <section id="suggestion" class="note" hidden><p class="eyebrow">ЕЩЁ ОДНА ИДЕЯ</p><strong></strong><p class="suggestion-reason"></p><div><button id="accept" class="quiet">Добавить</button><button id="dismiss" class="quiet">Не подходит</button></div></section>
-      <details class="text-entry"><summary>Удобнее написать</summary><label for="context">Что влияет на твой выбор?</label><textarea id="context" rows="4" maxlength="12000" placeholder="Что хочется, что мешает, какие есть ограничения…"></textarea></details>
-      <details class="conversation"><summary>Наш разговор</summary><div id="transcript">Здесь появится расшифровка разговора.</div></details>
+      <section id="suggestion" class="note" hidden><p class="eyebrow">ANOTHER IDEA</p><strong></strong><p class="suggestion-reason"></p><div><button id="accept" class="quiet">Add</button><button id="dismiss" class="quiet">Not for me</button></div></section>
+      <details class="text-entry"><summary>Prefer to type</summary><label for="context">What matters for your choice?</label><textarea id="context" rows="4" maxlength="12000" placeholder="What you want, what gets in the way, any constraints…"></textarea></details>
+      <details class="conversation"><summary>Our conversation</summary><div id="transcript">Your conversation will appear here.</div></details>
     </section>
-    <footer>Проценты — относительная оценка вариантов.<br>Последнее слово за тобой.</footer>
+    <footer>Percentages show the relative fit of each option.<br>The final choice is yours.</footer>
   </main>
   <audio id="audio" autoplay playsinline></audio>
 </body>

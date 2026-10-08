@@ -4,10 +4,11 @@ import { once } from 'node:events';
 import { request } from 'node:http';
 import { createApp, shares } from './server.js';
 
-const options = ['Поезд', 'Самолёт', 'Автобус'].map((label, i) => ({ id: `o${i}`, label }));
-const state = (extra = {}) => ({ options, context: 'Хочу недорого и без перелёта.', ...extra });
+const options = ['Train', 'Plane', 'Bus'].map((label, i) => ({ id: `o${i}`, label }));
+const topic = 'How should I get to Boston?';
+const state = (extra = {}) => ({ topic, options, context: 'I want a cheap option without flying.', ...extra });
 const advice = (excluded = []) => ({ status: 'completed', output: [{ content: [{ type: 'output_text', text: JSON.stringify({
-  notes: options.map((o) => ({ id: o.id, reason: 'Учитывает ваши условия', excluded: excluded.includes(o.id) })),
+  notes: options.map((o) => ({ id: o.id, reason: 'Fits your constraints', excluded: excluded.includes(o.id) })),
   question: null, suggestion: null,
 }) }] }] });
 const decision = (values = [0.5, 0.3, 0.2], enough = 0.9) => ({ answers: [
@@ -37,13 +38,15 @@ async function app(t, replies = [], extra = {}) {
 
 test('Responses explains; Decisions supplies the displayed probability distribution', async (t) => {
   const { calls, post } = await app(t, [advice(), decision()]);
-  const result = await post(state());
+  const result = await post(state({ topic: `  ${topic}  ` }));
   assert.equal(result.status, 200);
   assert.equal(result.body.ready, true);
   assert.deepEqual(result.body.options.map((o) => o.share), [50, 30, 20]);
   assert.deepEqual(calls.map((c) => [c.url, c.body.model]), [
     ['https://api.openai.com/v1/responses', 'gpt-6-luna'], ['https://api.openai.com/v1/decisions', 'gpt-6-luna'],
   ]);
+  assert.equal(JSON.parse(calls[0].body.input).topic, topic);
+  assert.equal(JSON.parse(calls[1].body.input).topic, topic);
   assert.equal(calls[0].body.store, false);
   assert.equal(calls[0].body.text.format.strict, true);
   assert.equal(calls[0].headers.Authorization, 'Bearer test-secret');
@@ -51,13 +54,26 @@ test('Responses explains; Decisions supplies the displayed probability distribut
   assert.deepEqual(calls[1].body.questions[1].choices, options.map((o) => ({ value: o.id, description: o.label })));
 });
 
-test('empty context does not call a paid API, even without a key', async (t) => {
+test('topic alone with empty context does not call a paid API, even without a key', async (t) => {
   const { calls, post } = await app(t, [], { OPENAI_API_KEY: '' });
   const result = await post(state({ context: '   ' }));
   assert.equal(result.status, 200);
   assert.equal(result.body.ready, false);
   assert.ok(result.body.options.every((o) => o.share === null));
   assert.equal(calls.length, 0);
+});
+
+test('Live session receives the required topic in its initial instructions', async (t) => {
+  const answer = { transport: { sdp: 'v=0\r\nanswer' } };
+  const { calls, post } = await app(t, [answer]);
+  const result = await post(state({ topic: `  ${topic}  `, sdp: 'v=0\r\noffer' }), '/api/session');
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, answer);
+  assert.equal(calls[0].url, 'https://api.openai.com/v1/live/sessions');
+  assert.equal(calls[0].body.session.model, 'gpt-live-1');
+  assert.ok(calls[0].body.session.instructions.includes('Speak English'));
+  assert.ok(calls[0].body.session.instructions.includes(`"topic":${JSON.stringify(topic)}`));
+  assert.equal(calls[0].body.transport.sdp, 'v=0\r\noffer');
 });
 
 test('user and model exclusions remove options from the decision input', async (t) => {
@@ -67,7 +83,7 @@ test('user and model exclusions remove options from the decision input', async (
   assert.deepEqual(result.body.options.map((o) => o.share), [100, null, null]);
   assert.deepEqual(JSON.parse(calls[1].body.input).options.map((o) => o.id), ['o0']);
   assert.deepEqual(calls[1].body.questions.map((q) => q.type), ['predicate']);
-  assert.equal(result.body.options[2].reason, 'Исключён вами');
+  assert.equal(result.body.options[2].reason, 'Excluded by you');
 });
 
 test('an excluded option is absent from a multi-option choice', async (t) => {
@@ -121,8 +137,13 @@ test('incomplete or refused provider output fails instead of manufacturing score
 test('invalid input is rejected before any provider call', async (t) => {
   const { calls, post, base } = await app(t);
   for (const body of [null, {}, state({ options: [null, options[0]] }), state({ options: [options[0], options[0]] }),
-    state({ options: [{ id: 'x', label: 'Поезд' }, { id: 'y', label: ' поезд ' }] }), state({ context: 42 })]) {
+    state({ options: [{ id: 'x', label: 'Train' }, { id: 'y', label: ' train ' }] }), state({ context: 42 })]) {
     assert.equal((await post(body)).status, 400);
+  }
+  for (const topic of [undefined, '', '   ', null, 42, 'x'.repeat(161)]) {
+    for (const path of ['/api/evaluate', '/api/session']) {
+      assert.equal((await post(state({ topic, sdp: 'v=0\r\noffer' }), path)).status, 400);
+    }
   }
   assert.equal((await post(state({ context: 'x'.repeat(100000) }))).status, 413);
   const malformed = await fetch(`${base}/api/evaluate`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{' });
